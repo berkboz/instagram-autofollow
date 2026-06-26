@@ -71,7 +71,7 @@ You can adjust these values near the top of the script:
 
 ```js
 const FOLLOW_LIMIT = 1000;
-const BREAK_DURATION = 5 * 60 * 1000;
+const BREAK_DURATION = 20 * 1000;
 const TOTAL_DURATION = 10 * 60 * 1000;
 ```
 

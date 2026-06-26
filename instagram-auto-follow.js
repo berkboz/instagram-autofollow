@@ -1,41 +1,80 @@
 const followEveryone = (async () => {
   const FOLLOW_LIMIT = 1000;
-  const BREAK_DURATION = 5 * 60 * 1000;
+  const BREAK_DURATION = 20 * 1000;
   const TOTAL_DURATION = 10 * 60 * 1000;
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const seconds = (ms) => Math.round(ms / 1000);
 
+  const findActiveDialog = () =>
+    Array.from(document.querySelectorAll('[role="dialog"]'))
+      .filter((dialog) => {
+        const rect = dialog.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .at(-1);
+
   const findScrollableContainer = () => {
-    const dialog = document.querySelector('[role="dialog"]');
+    const dialog = findActiveDialog();
+    const root = dialog || document;
+    const actionButton = Array.from(root.querySelectorAll("button")).find(
+      (button) => ["Follow", "Following"].includes(button.innerText.trim())
+    );
+
+    let ancestor = actionButton?.parentElement;
+
+    while (ancestor && ancestor !== root.parentElement) {
+      if (ancestor.scrollHeight > ancestor.clientHeight + 2) {
+        return ancestor;
+      }
+
+      ancestor = ancestor.parentElement;
+    }
 
     const containers = Array.from(
-      (dialog || document).querySelectorAll("div")
-    ).filter((el) => el.scrollHeight > el.clientHeight + 100);
+      root.querySelectorAll("div")
+    ).filter((el) => el.scrollHeight > el.clientHeight + 2);
 
-    return containers.sort((a, b) => b.clientHeight - a.clientHeight)[0];
+    return containers.sort(
+      (a, b) =>
+        b.scrollHeight - b.clientHeight - (a.scrollHeight - a.clientHeight)
+    )[0];
   };
 
-  const isButtonVisibleInContainer = (button, container) => {
+  const isButtonVisible = (button, dialog) => {
     const buttonRect = button.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
+    const boundaryRect = dialog?.getBoundingClientRect() || {
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+      left: 0,
+    };
+    const style = window.getComputedStyle(button);
+    const centerX = buttonRect.left + buttonRect.width / 2;
+    const centerY = buttonRect.top + buttonRect.height / 2;
+    const elementAtCenter = document.elementFromPoint(centerX, centerY);
 
     return (
-      buttonRect.top >= containerRect.top &&
-      buttonRect.bottom <= containerRect.bottom &&
       buttonRect.width > 0 &&
-      buttonRect.height > 0
+      buttonRect.height > 0 &&
+      buttonRect.bottom > boundaryRect.top &&
+      buttonRect.top < boundaryRect.bottom &&
+      buttonRect.right > boundaryRect.left &&
+      buttonRect.left < boundaryRect.right &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      (elementAtCenter === button || button.contains(elementAtCenter))
     );
   };
 
   const findVisibleFollowButton = () => {
-    const container = findScrollableContainer();
-    if (!container) return null;
+    const dialog = findActiveDialog();
+    const root = dialog || document;
 
-    return Array.from(document.querySelectorAll("button")).find(
+    return Array.from(root.querySelectorAll("button")).find(
       (button) =>
         button.innerText.trim() === "Follow" &&
-        isButtonVisibleInContainer(button, container)
+        isButtonVisible(button, dialog)
     );
   };
 
@@ -93,12 +132,18 @@ const followEveryone = (async () => {
 
         if (!followButton) {
           if (!canScrollMore) {
-            console.log("🏁 Reached the bottom. No more visible users to follow.");
-            break;
-          }
+            console.log("🔄 At the apparent bottom. Waiting briefly and checking again...");
+            await delay(2000);
+            followButton = findVisibleFollowButton();
 
-          console.log("🧭 Scrolled, but no visible Follow button yet. Continuing...");
-          continue;
+            if (!followButton) {
+              console.log("🏁 Reached the bottom. No more visible users to follow.");
+              break;
+            }
+          } else {
+            console.log("🧭 Scrolled, but no visible Follow button yet. Continuing...");
+            continue;
+          }
         }
       }
 
@@ -114,7 +159,7 @@ const followEveryone = (async () => {
       await delay(FOLLOW_INTERVAL);
     }
 
-    console.log(`☕ Taking a ${BREAK_DURATION / 1000 / 60}-minute break. Tiny pause, big wisdom.`);
+    console.log(`☕ Taking a ${seconds(BREAK_DURATION)}-second break. Tiny pause, big wisdom.`);
     await delay(BREAK_DURATION);
 
     startTime = new Date().getTime();
