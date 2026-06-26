@@ -17,6 +17,14 @@ const followEveryone = (async () => {
   const findScrollableContainer = () => {
     const dialog = findActiveDialog();
     const root = dialog || document;
+    const isScrollable = (element) => {
+      const overflowY = window.getComputedStyle(element).overflowY;
+
+      return (
+        ["auto", "scroll"].includes(overflowY) &&
+        element.scrollHeight > element.clientHeight + 2
+      );
+    };
     const actionButton = Array.from(root.querySelectorAll("button")).find(
       (button) => ["Follow", "Following"].includes(button.innerText.trim())
     );
@@ -24,7 +32,7 @@ const followEveryone = (async () => {
     let ancestor = actionButton?.parentElement;
 
     while (ancestor && ancestor !== root.parentElement) {
-      if (ancestor.scrollHeight > ancestor.clientHeight + 2) {
+      if (isScrollable(ancestor)) {
         return ancestor;
       }
 
@@ -33,7 +41,7 @@ const followEveryone = (async () => {
 
     const containers = Array.from(
       root.querySelectorAll("div")
-    ).filter((el) => el.scrollHeight > el.clientHeight + 2);
+    ).filter(isScrollable);
 
     return containers.sort(
       (a, b) =>
