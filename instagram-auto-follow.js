@@ -25,28 +25,19 @@ const followEveryone = (async () => {
         element.scrollHeight > element.clientHeight + 2
       );
     };
-    const actionButton = Array.from(root.querySelectorAll("button")).find(
-      (button) => ["Follow", "Following"].includes(button.innerText.trim())
+    const containers = Array.from(root.querySelectorAll("div")).filter(
+      isScrollable
     );
 
-    let ancestor = actionButton?.parentElement;
-
-    while (ancestor && ancestor !== root.parentElement) {
-      if (isScrollable(ancestor)) {
-        return ancestor;
-      }
-
-      ancestor = ancestor.parentElement;
-    }
-
-    const containers = Array.from(
-      root.querySelectorAll("div")
-    ).filter(isScrollable);
-
-    return containers.sort(
-      (a, b) =>
-        b.scrollHeight - b.clientHeight - (a.scrollHeight - a.clientHeight)
-    )[0];
+    return (
+      containers.find((container) =>
+        Array.from(container.querySelectorAll("button")).some((button) =>
+          ["Follow", "Following", "Requested"].includes(
+            button.innerText.trim()
+          )
+        )
+      ) || containers[0]
+    );
   };
 
   const isButtonVisible = (button, dialog) => {
@@ -99,7 +90,8 @@ const followEveryone = (async () => {
       return true;
     }
 
-    const before = container.scrollTop;
+    const beforeTop = container.scrollTop;
+    const beforeHeight = container.scrollHeight;
     const scrollAmount = container.clientHeight * 0.85;
 
     container.scrollBy({
@@ -107,14 +99,15 @@ const followEveryone = (async () => {
       behavior: "smooth",
     });
 
-    await delay(1800);
+    await delay(2000);
 
-    const after = container.scrollTop;
-    const isAtBottom =
-      Math.ceil(container.scrollTop + container.clientHeight) >=
-      container.scrollHeight;
+    if (container.scrollTop > beforeTop) {
+      return true;
+    }
 
-    return after !== before && !isAtBottom;
+    await delay(2000);
+
+    return container.scrollHeight > beforeHeight;
   };
 
   console.log("🌱 Instagram Auto Follow started.");
