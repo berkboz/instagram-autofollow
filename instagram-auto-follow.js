@@ -1,4 +1,5 @@
 const followEveryone = (async () => {
+  const SCRIPT_VERSION = "2026-06-29.3";
   const FOLLOW_LIMIT = 1000;
   const BREAK_DURATION = 20 * 1000;
   const TOTAL_DURATION = 10 * 60 * 1000;
@@ -15,19 +16,20 @@ const followEveryone = (async () => {
       })
       .at(-1);
 
+  const isScrollableElement = (element) => {
+    const overflowY = window.getComputedStyle(element).overflowY;
+
+    return (
+      ["auto", "scroll"].includes(overflowY) &&
+      element.scrollHeight > element.clientHeight + 2
+    );
+  };
+
   const findScrollableContainer = () => {
     const dialog = findActiveDialog();
     const root = dialog || document;
-    const isScrollable = (element) => {
-      const overflowY = window.getComputedStyle(element).overflowY;
-
-      return (
-        ["auto", "scroll"].includes(overflowY) &&
-        element.scrollHeight > element.clientHeight + 2
-      );
-    };
     const containers = Array.from(root.querySelectorAll("div")).filter(
-      isScrollable
+      isScrollableElement
     );
 
     return (
@@ -43,7 +45,20 @@ const followEveryone = (async () => {
 
   const isButtonVisible = (button, dialog) => {
     const buttonRect = button.getBoundingClientRect();
-    const boundaryRect = dialog?.getBoundingClientRect() || {
+    let scrollableAncestor = button.parentElement;
+
+    while (
+      scrollableAncestor &&
+      scrollableAncestor !== dialog &&
+      !isScrollableElement(scrollableAncestor)
+    ) {
+      scrollableAncestor = scrollableAncestor.parentElement;
+    }
+
+    const boundaryRect =
+      (scrollableAncestor && scrollableAncestor !== dialog
+        ? scrollableAncestor.getBoundingClientRect()
+        : dialog?.getBoundingClientRect()) || {
       top: 0,
       right: window.innerWidth,
       bottom: window.innerHeight,
@@ -52,24 +67,18 @@ const followEveryone = (async () => {
     const style = window.getComputedStyle(button);
     const centerX = buttonRect.left + buttonRect.width / 2;
     const centerY = buttonRect.top + buttonRect.height / 2;
-    const elementAtCenter = document.hidden
-      ? null
-      : document.elementFromPoint(centerX, centerY);
-    const isUnobscured =
-      document.hidden ||
-      elementAtCenter === button ||
-      button.contains(elementAtCenter);
 
     return (
       buttonRect.width > 0 &&
       buttonRect.height > 0 &&
-      buttonRect.bottom > boundaryRect.top &&
-      buttonRect.top < boundaryRect.bottom &&
-      buttonRect.right > boundaryRect.left &&
-      buttonRect.left < boundaryRect.right &&
+      centerY >= boundaryRect.top &&
+      centerY <= boundaryRect.bottom &&
+      centerX >= boundaryRect.left &&
+      centerX <= boundaryRect.right &&
       style.display !== "none" &&
       style.visibility !== "hidden" &&
-      isUnobscured
+      style.opacity !== "0" &&
+      style.pointerEvents !== "none"
     );
   };
 
@@ -132,7 +141,7 @@ const followEveryone = (async () => {
     return currentContainer?.scrollHeight > beforeHeight;
   };
 
-  console.log("🌱 Instagram Auto Follow started.");
+  console.log(`🌱 Instagram Auto Follow ${SCRIPT_VERSION} started.`);
   console.log("👀 Looking for visible Follow buttons in the current list...");
   console.log("⚠️ Use gently. Random waits help avoid repetitive timing, but they do not guarantee safety from rate limits or restrictions.");
 
