@@ -2,6 +2,7 @@ const followEveryone = (async () => {
   const FOLLOW_LIMIT = 1000;
   const BREAK_DURATION = 20 * 1000;
   const TOTAL_DURATION = 10 * 60 * 1000;
+  const BOTTOM_CONFIRMATIONS = 3;
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const seconds = (ms) => Math.round(ms / 1000);
@@ -51,7 +52,13 @@ const followEveryone = (async () => {
     const style = window.getComputedStyle(button);
     const centerX = buttonRect.left + buttonRect.width / 2;
     const centerY = buttonRect.top + buttonRect.height / 2;
-    const elementAtCenter = document.elementFromPoint(centerX, centerY);
+    const elementAtCenter = document.hidden
+      ? null
+      : document.elementFromPoint(centerX, centerY);
+    const isUnobscured =
+      document.hidden ||
+      elementAtCenter === button ||
+      button.contains(elementAtCenter);
 
     return (
       buttonRect.width > 0 &&
@@ -62,7 +69,7 @@ const followEveryone = (async () => {
       buttonRect.left < boundaryRect.right &&
       style.display !== "none" &&
       style.visibility !== "hidden" &&
-      (elementAtCenter === button || button.contains(elementAtCenter))
+      isUnobscured
     );
   };
 
@@ -81,23 +88,24 @@ const followEveryone = (async () => {
     const container = findScrollableContainer();
 
     if (!container) {
-      window.scrollBy({
-        top: window.innerHeight * 0.85,
-        behavior: "smooth",
-      });
+      const page = document.scrollingElement || document.documentElement;
+      const beforeTop = page.scrollTop;
+
+      page.scrollTop = beforeTop + window.innerHeight * 0.85;
 
       await delay(1500);
-      return true;
+      return page.scrollTop > beforeTop || document.hidden;
     }
 
     const beforeTop = container.scrollTop;
     const beforeHeight = container.scrollHeight;
     const scrollAmount = container.clientHeight * 0.85;
 
-    container.scrollBy({
-      top: scrollAmount,
-      behavior: "smooth",
-    });
+    container.scrollTop = Math.min(
+      beforeTop + scrollAmount,
+      container.scrollHeight - container.clientHeight
+    );
+    container.dispatchEvent(new Event("scroll", { bubbles: true }));
 
     await delay(2000);
 
@@ -105,9 +113,23 @@ const followEveryone = (async () => {
       return true;
     }
 
+    let currentContainer = findScrollableContainer();
+
+    if (currentContainer?.scrollHeight > beforeHeight) {
+      return true;
+    }
+
+    if (document.hidden) {
+      console.log(
+        "🌙 Instagram is a background tab. Retrying instead of assuming the list ended..."
+      );
+      return true;
+    }
+
     await delay(2000);
 
-    return container.scrollHeight > beforeHeight;
+    currentContainer = findScrollableContainer();
+    return currentContainer?.scrollHeight > beforeHeight;
   };
 
   console.log("🌱 Instagram Auto Follow started.");
@@ -116,6 +138,7 @@ const followEveryone = (async () => {
 
   let startTime = new Date().getTime();
   let followCount = 0;
+  let bottomConfirmationCount = 0;
 
   while (new Date().getTime() - startTime < TOTAL_DURATION) {
     for (let i = 0; i < FOLLOW_LIMIT; i++) {
@@ -124,7 +147,9 @@ const followEveryone = (async () => {
       let followButton = findVisibleFollowButton();
 
       if (!followButton) {
-        console.log("🔎 No visible Follow button right now. Scrolling a little...");
+        console.log(
+          `🔎 No visible Follow button right now. Scrolling a little... (tab: ${document.visibilityState})`
+        );
         const canScrollMore = await scrollOneBatch();
 
         await delay(1000);
@@ -133,21 +158,32 @@ const followEveryone = (async () => {
 
         if (!followButton) {
           if (!canScrollMore) {
-            console.log("🔄 At the apparent bottom. Waiting briefly and checking again...");
+            bottomConfirmationCount++;
+            console.log(
+              `🔄 Scroll did not move. Confirming before calling it the bottom (${bottomConfirmationCount}/${BOTTOM_CONFIRMATIONS})...`
+            );
             await delay(2000);
             followButton = findVisibleFollowButton();
 
             if (!followButton) {
-              console.log("🏁 Reached the bottom. No more visible users to follow.");
-              break;
+              if (bottomConfirmationCount >= BOTTOM_CONFIRMATIONS) {
+                console.log(
+                  "🏁 Bottom confirmed. No more visible users to follow."
+                );
+                break;
+              }
+
+              continue;
             }
           } else {
+            bottomConfirmationCount = 0;
             console.log("🧭 Scrolled, but no visible Follow button yet. Continuing...");
             continue;
           }
         }
       }
 
+      bottomConfirmationCount = 0;
       followButton.scrollIntoViewIfNeeded?.();
       followButton.click();
 
